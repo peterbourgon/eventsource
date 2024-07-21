@@ -48,7 +48,7 @@ func TestHandlerAcceptable(t *testing.T) {
 
 func TestHandlerValidatesAcceptHeader(t *testing.T) {
 	w, r := httptest.NewRecorder(), &http.Request{Header: map[string][]string{
-		"Accept": []string{"text/html"},
+		"Accept": {"text/html"},
 	}}
 	emptyHandler.ServeHTTP(w, r)
 
@@ -59,11 +59,11 @@ func TestHandlerValidatesAcceptHeader(t *testing.T) {
 
 func TestHandlerSetsContentType(t *testing.T) {
 	w, r := httptest.NewRecorder(), &http.Request{Header: map[string][]string{
-		"Accept": []string{"text/event-stream"},
+		"Accept": {"text/event-stream"},
 	}}
 	emptyHandler.ServeHTTP(w, r)
 
-	if w.HeaderMap.Get("Content-Type") != "text/event-stream" {
+	if w.Result().Header.Get("Content-Type") != "text/event-stream" {
 		t.Fatal("handler did not set appropriate content type")
 	}
 
@@ -78,7 +78,7 @@ func TestHandlerEncode(t *testing.T) {
 	}
 
 	w, r := httptest.NewRecorder(), &http.Request{Header: map[string][]string{
-		"Accept": []string{"text/event-stream"},
+		"Accept": {"text/event-stream"},
 	}}
 
 	Handler(handler).ServeHTTP(w, r)
@@ -99,7 +99,7 @@ func TestHandlerCloseNotify(t *testing.T) {
 	}
 
 	w, r := httptest.NewRecorder(), &http.Request{Header: map[string][]string{
-		"Accept": []string{"text/event-stream"},
+		"Accept": {"text/event-stream"},
 	}}
 	closer := testCloseNotifier{make(chan bool, 1), w}
 	go Handler(handler).ServeHTTP(closer, r)
