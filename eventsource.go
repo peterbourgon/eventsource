@@ -3,6 +3,7 @@
 package eventsource
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -13,17 +14,14 @@ import (
 )
 
 var (
-	// ErrClosed signals that the event source has been closed and will not be
-	// reopened.
+	// ErrClosed indicates the event source has been permanently closed.
 	ErrClosed = errors.New("closed")
 
-	// ErrInvalidEncoding is returned by Encoder and Decoder when invalid UTF-8
-	// event data is encountered.
+	// ErrInvalidEncoding indicates invalid UTF-8 event data.
 	ErrInvalidEncoding = errors.New("invalid UTF-8 sequence")
 )
 
-// An Event is a message can be written to an event stream and read from an
-// event source.
+// Event can be written to an event stream, and read from an event source.
 type Event struct {
 	Type    string
 	ID      string
@@ -32,11 +30,11 @@ type Event struct {
 	ResetID bool
 }
 
-// An EventSource consumes server sent events over HTTP with automatic
-// recovery.
+// EventSource consumes server sent events over HTTP with automatic recovery.
 type EventSource struct {
-	retry       time.Duration
+	client      HTTPClient
 	request     *http.Request
+	retry       time.Duration
 	err         error
 	r           io.ReadCloser
 	dec         *Decoder
@@ -47,12 +45,38 @@ type EventSource struct {
 // req to connect, and retrying from recoverable errors after waiting the
 // provided retry duration.
 func New(req *http.Request, retry time.Duration) *EventSource {
-	req.Header.Set("Accept", "text/event-stream")
-	req.Header.Set("Cache-Control", "no-cache")
+	return NewConfig(Config{
+		Request: req,
+		Retry:   retry,
+	})
+}
+
+type Config struct {
+	Client  HTTPClient
+	Request *http.Request
+	Retry   time.Duration
+}
+
+type HTTPClient interface {
+	Do(*http.Request) (*http.Response, error)
+}
+
+func NewConfig(config Config) *EventSource {
+	if config.Client == nil {
+		config.Client = http.DefaultClient
+	}
+
+	if config.Retry <= 0 {
+		config.Retry = time.Second
+	}
+
+	config.Request.Header.Set("Accept", "text/event-stream")
+	config.Request.Header.Set("Cache-Control", "no-cache")
 
 	return &EventSource{
-		retry:   retry,
-		request: req,
+		client:  config.Client,
+		retry:   config.Retry,
+		request: config.Request,
 	}
 }
 
@@ -75,32 +99,39 @@ func (es *EventSource) connect() {
 
 		es.request.Header.Set("Last-Event-Id", es.lastEventID)
 
-		resp, err := http.DefaultClient.Do(es.request)
+		resp, err := es.client.Do(es.request)
+		switch {
+		case errors.Is(err, context.Canceled): // canceled contexts are fatal
+			es.err = err
+			continue
 
-		if err != nil {
-			continue // reconnect
-		}
+		case err != nil: // other execution errors are assumed to be non-fatal
+			continue
 
-		if resp.StatusCode >= 500 {
-			// assumed to be temporary, try reconnecting
+		case resp.StatusCode >= 500: // 5xx are assumed to be temporary
 			resp.Body.Close()
-		} else if resp.StatusCode == 204 {
+			continue
+
+		case resp.StatusCode == 204: // 204 No Content is assumed to be fatal
 			resp.Body.Close()
 			es.err = ErrClosed
-		} else if resp.StatusCode != 200 {
-			resp.Body.Close()
-			es.err = fmt.Errorf("endpoint returned unrecoverable status %q", resp.Status)
-		} else {
-			mediatype, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type"))
+			continue
 
-			if mediatype != "text/event-stream" {
+		case resp.StatusCode == 200:
+			ct := resp.Header.Get("content-type")
+			mt, _, _ := mime.ParseMediaType(ct)
+			if mt != "text/event-stream" {
 				resp.Body.Close()
-				es.err = fmt.Errorf("invalid content type %q", resp.Header.Get("Content-Type"))
-			} else {
-				es.r = resp.Body
-				es.dec = NewDecoder(es.r)
-				return
+				es.err = fmt.Errorf("invalid response Content-Type (%s)", ct)
+				continue
 			}
+			es.r = resp.Body
+			es.dec = NewDecoder(es.r)
+			return
+
+		default:
+			es.err = fmt.Errorf("endpoint returned unrecoverable status %s", resp.Status)
+			continue
 		}
 	}
 }
@@ -117,11 +148,9 @@ func (es *EventSource) Read() (Event, error) {
 		var e Event
 
 		err := es.dec.Decode(&e)
-
-		if err == ErrInvalidEncoding {
+		if errors.Is(err, ErrInvalidEncoding) {
 			continue
 		}
-
 		if err != nil {
 			es.connect()
 			continue

@@ -44,25 +44,22 @@ func TestEncodeDecodeIdentity(t *testing.T) {
 	in := randomEvents()
 
 	go func() {
+		defer w.Close()
 		for _, event := range in {
 			if err := e.Encode(event); err != nil {
-				t.Fatal(err)
+				t.Error(err)
 			}
 		}
-
-		w.Close()
 	}()
 
 	out := make([]Event, 0, len(in))
 
 	for {
-		var event Event
-
-		if d.Decode(&event) != nil {
+		var e Event
+		if d.Decode(&e) != nil {
 			break
 		}
-
-		out = append(out, event)
+		out = append(out, e)
 	}
 
 	if !reflect.DeepEqual(in, out) {

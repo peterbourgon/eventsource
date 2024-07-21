@@ -3,6 +3,7 @@ package eventsource
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"unicode/utf8"
 )
@@ -16,15 +17,16 @@ type Decoder struct {
 
 // NewDecoder returns a new decoder that reads from r.
 func NewDecoder(r io.Reader) *Decoder {
-	return &Decoder{r: bufio.NewReader(r)}
+	return &Decoder{
+		r: bufio.NewReader(r),
+	}
 }
 
 func (d *Decoder) checkBOM() {
 	r, _, err := d.r.ReadRune()
 
 	if err != nil {
-		// let other other callers handle this
-		return
+		return // let other other callers handle this
 	}
 
 	if r != 0xFEFF { // utf8 byte order mark
@@ -33,6 +35,8 @@ func (d *Decoder) checkBOM() {
 
 	d.checkedBOM = true
 }
+
+var colon = []byte{':'}
 
 // ReadField reads a single line from the stream and parses it as a field. A
 // complete event is signalled by an empty key and value. The returned error
@@ -63,23 +67,20 @@ func (d *Decoder) ReadField() (field string, value []byte, err error) {
 		return "", nil, nil
 	}
 
-	parts := bytes.SplitN(buf, []byte{':'}, 2)
-	field = string(parts[0])
-
-	if len(parts) == 2 {
-		value = parts[1]
-	}
+	f, v, _ := bytes.Cut(buf, colon)
 
 	// §7. If value starts with a U+0020 SPACE character, remove it from value.
-	if len(value) > 0 && value[0] == ' ' {
-		value = value[1:]
+	if len(v) > 0 && v[0] == ' ' {
+		v = v[1:]
 	}
 
-	if !utf8.ValidString(field) || !utf8.Valid(value) {
-		err = ErrInvalidEncoding
+	fstr := string(f)
+
+	if !utf8.ValidString(fstr) || !utf8.Valid(v) {
+		return "", nil, ErrInvalidEncoding
 	}
 
-	return
+	return fstr, v, nil
 }
 
 // Decode reads the next event from its input and stores it in the provided
@@ -87,14 +88,12 @@ func (d *Decoder) ReadField() (field string, value []byte, err error) {
 func (d *Decoder) Decode(e *Event) error {
 	var wroteData bool
 
-	// set default event type
-	e.Type = "message"
+	e.Type = "message" // set default event type
 
 	for {
 		field, value, err := d.ReadField()
-
 		if err != nil {
-			return err
+			return fmt.Errorf("read field: %w", err)
 		}
 
 		if len(field) == 0 && len(value) == 0 {
@@ -107,10 +106,13 @@ func (d *Decoder) Decode(e *Event) error {
 			if len(e.ID) == 0 {
 				e.ResetID = true
 			}
+
 		case "retry":
 			e.Retry = string(value)
+
 		case "event":
 			e.Type = string(value)
+
 		case "data":
 			if wroteData {
 				e.Data = append(e.Data, '\n')

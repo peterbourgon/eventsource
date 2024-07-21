@@ -7,13 +7,12 @@ import (
 	"unicode/utf8"
 )
 
-// The FlushWriter interface groups basic Write and Flush methods.
+// FlushWriter groups Write and Flush.
 type FlushWriter interface {
 	io.Writer
 	Flush()
 }
 
-// Adds a noop Flush method to a normal io.Writer.
 type noopFlusher struct {
 	io.Writer
 }
@@ -30,14 +29,14 @@ func NewEncoder(w io.Writer) *Encoder {
 	if w, ok := w.(FlushWriter); ok {
 		return &Encoder{w}
 	}
-
 	return &Encoder{noopFlusher{w}}
 }
 
-// Flush sends an empty line to signal event is complete, and flushes the
-// writer.
+var newline = []byte{'\n'}
+
+// Flush an empty line to signal event is complete, and flush the writer.
 func (e *Encoder) Flush() error {
-	_, err := e.w.Write([]byte{'\n'})
+	_, err := e.w.Write(newline)
 	e.w.Flush()
 	return err
 }
@@ -51,27 +50,27 @@ func (e *Encoder) WriteField(field string, value []byte) error {
 		return ErrInvalidEncoding
 	}
 
-	for _, line := range bytes.Split(value, []byte{'\n'}) {
+	for _, line := range bytes.Split(value, newline) {
 		if len(line) > 0 && line[len(line)-1] == '\r' {
 			line = line[:len(line)-1]
 		}
 
 		if err := e.writeField(field, line); err != nil {
-			return err
+			return fmt.Errorf("write field: %w", err)
 		}
 	}
 
 	return nil
 }
 
-func (e *Encoder) writeField(field string, value []byte) (err error) {
+func (e *Encoder) writeField(field string, value []byte) error {
 	if len(value) == 0 {
-		_, err = fmt.Fprintf(e.w, "%s\n", field)
-	} else {
-		_, err = fmt.Fprintf(e.w, "%s: %s\n", field, value)
+		_, err := fmt.Fprintf(e.w, "%s\n", field)
+		return err
 	}
 
-	return
+	_, err := fmt.Fprintf(e.w, "%s: %s\n", field, value)
+	return err
 }
 
 // Encode writes an event to the connection.

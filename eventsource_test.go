@@ -11,95 +11,92 @@ import (
 	"time"
 )
 
-type responseWriter interface {
-	http.ResponseWriter
-	http.Flusher
-	http.CloseNotifier
-}
+func TestEventSource200NoContentType(t *testing.T) {
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(200)
+		}),
+	)
+	defer server.Close()
 
-func testServer(f func(responseWriter, *http.Request)) *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		f(w.(responseWriter), r)
-	}))
-}
+	req, _ := http.NewRequest("GET", server.URL, nil)
+	retry := time.Millisecond
+	es := New(req, retry)
 
-func request(url string) *http.Request {
-	req, _ := http.NewRequest("GET", url, nil)
-	return req
+	es.connect()
+
+	if es.err == nil {
+		t.Fatalf("200 OK with no Content-Type should have errored, but didn't")
+	}
 }
 
 func TestEventSourceHeaders(t *testing.T) {
-	headers := make(chan http.Header)
-	server := testServer(func(w responseWriter, r *http.Request) {
-		headers <- r.Header
-	})
+	headers := make(chan http.Header, 1)
+
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			headers <- r.Header
+		}),
+	)
 	defer server.Close()
 
-	es := New(request(server.URL), -1)
-	go es.connect()
+	req, _ := http.NewRequest("GET", server.URL, nil)
+	retry := time.Duration(-1)
+	es := New(req, retry)
+
+	es.connect()
 
 	h := <-headers
 
-	if h.Get("Accept") != "text/event-stream" {
-		t.Errorf("expected accept header = %q, got %q", "text/event-stream", h.Get("Accept"))
+	if want, have := "text/event-stream", h.Get("accept"); want != have {
+		t.Errorf("Accept: want %q, have %q", want, have)
 	}
-
-	if h.Get("Cache-Control") != "no-cache" {
-		t.Errorf("expected cache control header = %q, got %q", "no-cache", h.Get("Cache-Control"))
+	if want, have := "no-cache", h.Get("cache-control"); want != have {
+		t.Errorf("Cache-Control: want %q, have %q", want, have)
 	}
 }
 
 func TestEventSource204(t *testing.T) {
-	server := testServer(func(w responseWriter, r *http.Request) {
-		w.WriteHeader(204)
-	})
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(204)
+		}),
+	)
 	defer server.Close()
 
-	es := New(request(server.URL), -1)
+	req, _ := http.NewRequest("GET", server.URL, nil)
+	retry := time.Millisecond
+	es := New(req, retry)
 
 	es.connect()
-
 	if es.err == nil {
-		t.Fatal("event source did not close on 204")
-	}
-}
-
-func TestEventSource(t *testing.T) {
-	server := testServer(func(w responseWriter, r *http.Request) {
-		w.WriteHeader(200)
-	})
-	defer server.Close()
-
-	es := New(request(server.URL), time.Millisecond)
-
-	es.connect()
-
-	if es.err == nil {
-		t.Fatal("event source did not close on 200 with no content type")
+		t.Fatalf("204 No Content should have errored, but didn't")
 	}
 }
 
 func TestEventSourceEmphemeral500(t *testing.T) {
 	fail := true
 
-	server := testServer(func(w responseWriter, r *http.Request) {
-		if fail {
-			w.WriteHeader(500)
-		} else {
+	server := httptest.NewServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if fail {
+				w.WriteHeader(500)
+				fail = false
+				return
+			}
 			w.Header().Set("Content-Type", "text/event-stream")
 			w.WriteHeader(200)
-		}
-
-		fail = !fail
-	})
+		}),
+	)
 	defer server.Close()
 
-	es := New(request(server.URL), time.Millisecond)
+	req, _ := http.NewRequest("GET", server.URL, nil)
+	retry := time.Millisecond
+	es := New(req, retry)
 
 	es.connect()
-
 	if es.err != nil {
-		t.Fatalf("event source did not reconnect on 500; got %q", es.err)
+		t.Fatalf("500 Internal Server Error should have reconnected, but didn't; error: %v", es.err)
 	}
 }
 
@@ -112,6 +109,7 @@ func TestEventSourceRead(t *testing.T) {
 			w.WriteHeader(204)
 			return
 		default:
+			//
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(200)
@@ -136,7 +134,7 @@ func TestEventSourceRead(t *testing.T) {
 	defer server.Close()
 	defer close(more)
 
-	es := New(request(server.URL), -1)
+	es := New(request(server.URL), 10*time.Millisecond)
 	more <- true
 
 	event, err := es.Read()
@@ -174,10 +172,9 @@ func TestEventSourceRead(t *testing.T) {
 		t.Fatalf("expected data = message 1, got %s", event.Data)
 	}
 
-	// stop handler
-	more <- false
-	// start handler
-	more <- true
+	more <- false // stop handler
+	more <- true  // start handler
+
 	event, err = es.Read()
 	if err != nil {
 		t.Fatal(err)
@@ -195,7 +192,7 @@ func TestEventSourceRead(t *testing.T) {
 		t.Fatalf("expected data = message 2, got %s", event.Data)
 	}
 
-	more <- false
+	more <- false // stop handler
 	close(fail)
 
 	if _, err := es.Read(); err == nil {
@@ -219,15 +216,12 @@ func TestEventSourceChangeRetry(t *testing.T) {
 	es := New(request(server.URL), -1)
 
 	event, err := es.Read()
-
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	if event.Retry != "10000" {
 		t.Error("event retry not set")
 	}
-
 	if es.retry != (10 * time.Second) {
 		t.Fatal("expected retry to be updated, but wasn't")
 	}
@@ -246,7 +240,6 @@ func TestEventSourceBOM(t *testing.T) {
 	es := New(request(server.URL), -1)
 
 	event, err := es.Read()
-
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,4 +247,20 @@ func TestEventSourceBOM(t *testing.T) {
 	if !reflect.DeepEqual(event, Event{Type: "custom", Data: []byte("foo")}) {
 		t.Fatal("message was unsuccessfully decoded with BOM")
 	}
+}
+
+type responseWriter interface {
+	http.ResponseWriter
+	http.Flusher
+}
+
+func testServer(f func(responseWriter, *http.Request)) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f(w.(responseWriter), r)
+	}))
+}
+
+func request(url string) *http.Request {
+	req, _ := http.NewRequest("GET", url, nil)
+	return req
 }

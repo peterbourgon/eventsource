@@ -1,24 +1,25 @@
 ## eventsource
 
-`eventsource` provides the building blocks for consuming and building
-[EventSource][spec] services.
+`eventsource` provides the building blocks for building and consuming
+[EventSource][spec] services. It's based on
+[bernerdschaefer/eventsource][upstream].
 
 ### Installing
 
-    $ go get github.com/bernerdschaefer/eventsource
+```shell
+go get github.com/peterbourgon/eventsource@latest
+```
 
 ### Importing
 
 ```go
-import "github.com/bernerdschaefer/eventsource"
+import "github.com/peterbourgon/eventsource"
 ```
 
 ### Docs
 
-See [godoc][godoc] for pretty documentation or:
+See [docs][docs] for pretty documentation.
 
-    # in the eventsource package directory
-    $ go doc
-
-[spec]: http://www.w3.org/TR/eventsource/
-[godoc]: http://godoc.org/github.com/bernerdschaefer/eventsource
+[spec]: https://www.w3.org/TR/eventsource/
+[docs]: https://pkg.go.dev/github.com/peterbourgon/eventsource
+[upstream]: https://github.com/bernerdschaefer/eventsource

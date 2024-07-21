@@ -1,14 +1,16 @@
 package eventsource_test
 
 import (
+	"errors"
 	"fmt"
-	"github.com/bernerdschaefer/eventsource"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/peterbourgon/eventsource"
 )
 
 func ExampleHandler() {
@@ -103,9 +105,10 @@ data: 123
 		var event eventsource.Event
 		err := dec.Decode(&event)
 
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			break
-		} else if err != nil {
+		}
+		if err != nil {
 			log.Fatal(err)
 		}
 

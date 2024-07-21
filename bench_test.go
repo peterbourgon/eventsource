@@ -1,69 +1,69 @@
-package eventsource
+package eventsource_test
 
 import (
 	"bytes"
 	"io"
-	"io/ioutil"
-	"strconv"
 	"testing"
+
+	"github.com/peterbourgon/eventsource"
 )
 
-var benchmarkData []byte
-var benchmarkEvents []Event
-
-func initBenchmarkData() {
-	var buf bytes.Buffer
-	e := NewEncoder(&buf)
-
-	for i := int64(0); i < 1000; i++ {
-		event := Event{
-			Data: strconv.AppendInt(nil, i, 10),
-		}
-
-		benchmarkEvents = append(benchmarkEvents, event)
-		e.Encode(event)
+func BenchmarkEncoder(b *testing.B) {
+	event := eventsource.Event{
+		ID:   "my-event-id",
+		Type: "EventTypeFoo",
+		Data: []byte(`my event data goes here`),
 	}
 
-	benchmarkData = buf.Bytes()
+	enc := eventsource.NewEncoder(io.Discard)
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	for i := 0; i < b.N; i++ {
+		if err := enc.Encode(event); err != nil {
+			b.Fatal(err)
+		}
+	}
 }
 
 func BenchmarkDecoder(b *testing.B) {
-	if benchmarkData == nil {
-		b.StopTimer()
-		initBenchmarkData()
-		b.StartTimer()
+	buf := &bytes.Buffer{}
+	enc := eventsource.NewEncoder(buf)
+	if err := enc.Encode(eventsource.Event{
+		ID:   "my-event-id",
+		Type: "EventTypeFoo",
+		Data: []byte(`my event data goes here`),
+	}); err != nil {
+		b.Fatalf("encode event: %v", err)
 	}
-	var buf bytes.Buffer
-	dec := NewDecoder(&buf)
+
+	r := &infiniteReader{data: buf.Bytes()}
+	dec := eventsource.NewDecoder(r)
+	ev := eventsource.Event{}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
 	for i := 0; i < b.N; i++ {
-		buf.Write(benchmarkData)
-
-		var err error
-		for err != io.EOF {
-			var event Event
-			err = dec.Decode(&event)
-
-			if err != nil && err != io.EOF {
-				b.Fatal("Decode:", err)
-			}
+		if err := dec.Decode(&ev); err != nil {
+			b.Fatal(err)
 		}
 	}
-	b.SetBytes(int64(len(benchmarkData)))
+
+	b.SetBytes(int64(buf.Len()))
 }
 
-func BenchmarkEncoder(b *testing.B) {
-	if benchmarkData == nil {
-		b.StopTimer()
-		initBenchmarkData()
-		b.StartTimer()
+type infiniteReader struct {
+	data   []byte
+	cursor int
+}
+
+func (ir *infiniteReader) Read(p []byte) (n int, err error) {
+	for n < len(p) {
+		p[n] = ir.data[ir.cursor]
+		ir.cursor = (ir.cursor + 1) % len(ir.data)
+		n = n + 1
 	}
-	enc := NewEncoder(ioutil.Discard)
-	for i := 0; i < b.N; i++ {
-		for _, e := range benchmarkEvents {
-			if err := enc.Encode(e); err != nil {
-				b.Fatal("Encode:", err)
-			}
-		}
-	}
-	b.SetBytes(int64(len(benchmarkData)))
+	return n, nil
 }

@@ -2,53 +2,46 @@ package eventsource
 
 import (
 	"bytes"
+	"errors"
 	"reflect"
+	"strconv"
 	"testing"
 )
 
-func longLine() string {
-	buf := make([]byte, 4096)
-	for i := 0; i < len(buf); i++ {
-		buf[i] = 'a'
-	}
-
-	return string(buf)
-}
+var longline = string(bytes.Repeat([]byte{'a'}, 4096))
 
 func TestDecoderReadField(t *testing.T) {
-	table := []struct {
+	for i, tt := range []struct {
 		in    string
 		field string
 		value []byte
 		err   error
 	}{
-		{"\n", "", nil, nil},
-		{"id", "id", nil, nil},
-		{"id:", "id", nil, nil},
-		{"id:1", "id", []byte("1"), nil},
-		{"id: 1", "id", []byte("1"), nil},
-		{"data: " + longLine(), "data", []byte(longLine()), nil},
-		{"\xFF\xFE\xFD", "\xFF\xFE\xFD", nil, ErrInvalidEncoding},
-		{"data: \xFF\xFE\xFD", "data", []byte("\xFF\xFE\xFD"), ErrInvalidEncoding},
-	}
-
-	for i, tt := range table {
-		dec := NewDecoder(bytes.NewBufferString(tt.in))
-
-		field, value, err := dec.ReadField()
-
-		if err != tt.err {
-			t.Errorf("%d. expected err=%q, got %q", i, tt.err, err)
-			continue
-		}
-
-		if exp, got := tt.field, field; exp != got {
-			t.Errorf("%d. expected field=%q, got %q", i, exp, got)
-		}
-
-		if exp, got := tt.value, value; !bytes.Equal(exp, got) {
-			t.Errorf("%d. expected value=%q, got %q", i, exp, got)
-		}
+		{in: "\n"},
+		{in: "id", field: "id"},
+		{in: "id:", field: "id"},
+		{in: "id:1", field: "id", value: []byte("1")},
+		{in: "id: 1", field: "id", value: []byte("1")},
+		{in: "data: " + longline, field: "data", value: []byte(longline)},
+		{in: "\xFF\xFE\xFD", err: ErrInvalidEncoding},
+		{in: "data: \xFF\xFE\xFD", err: ErrInvalidEncoding},
+	} {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			dec := NewDecoder(bytes.NewBufferString(tt.in))
+			field, value, err := dec.ReadField()
+			if tt.err != nil && !errors.Is(err, tt.err) {
+				t.Fatalf("error: want %q, have %q", tt.err, err)
+			}
+			if tt.err == nil && err != nil {
+				t.Fatalf("error: %v", err)
+			}
+			if want, have := tt.field, field; want != have {
+				t.Errorf("field: want %q, have %q", want, have)
+			}
+			if want, have := tt.value, value; !bytes.Equal(want, have) {
+				t.Errorf("value: want %q, have %q", want, have)
+			}
+		})
 	}
 }
 
