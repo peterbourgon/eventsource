@@ -49,6 +49,7 @@ func (h Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	var stop <-chan bool
 
+	//lint:ignore SA1019 legacy code here
 	if notifier, ok := w.(http.CloseNotifier); ok {
 		stop = notifier.CloseNotify()
 	}

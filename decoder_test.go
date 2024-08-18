@@ -11,6 +11,8 @@ import (
 var longline = string(bytes.Repeat([]byte{'a'}, 4096))
 
 func TestDecoderReadField(t *testing.T) {
+	t.Parallel()
+
 	for i, tt := range []struct {
 		in    string
 		field string
@@ -46,6 +48,8 @@ func TestDecoderReadField(t *testing.T) {
 }
 
 func TestDecoderDecode(t *testing.T) {
+	t.Parallel()
+
 	table := []struct {
 		in  string
 		out Event

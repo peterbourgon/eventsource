@@ -12,8 +12,10 @@ import (
 )
 
 func TestEventSource200NoContentType(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(
-		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(200)
 		}),
 	)
@@ -31,10 +33,12 @@ func TestEventSource200NoContentType(t *testing.T) {
 }
 
 func TestEventSourceHeaders(t *testing.T) {
+	t.Parallel()
+
 	headers := make(chan http.Header, 1)
 
 	server := httptest.NewServer(
-		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 			headers <- r.Header
 		}),
 	)
@@ -57,8 +61,10 @@ func TestEventSourceHeaders(t *testing.T) {
 }
 
 func TestEventSource204(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(
-		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(204)
 		}),
 	)
@@ -75,10 +81,12 @@ func TestEventSource204(t *testing.T) {
 }
 
 func TestEventSourceEmphemeral500(t *testing.T) {
+	t.Parallel()
+
 	fail := true
 
 	server := httptest.NewServer(
-		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			if fail {
 				w.WriteHeader(500)
 				fail = false
@@ -101,6 +109,8 @@ func TestEventSourceEmphemeral500(t *testing.T) {
 }
 
 func TestEventSourceRead(t *testing.T) {
+	t.Parallel()
+
 	fail := make(chan struct{})
 	more := make(chan bool, 1)
 	server := testServer(func(w responseWriter, r *http.Request) {
@@ -201,7 +211,9 @@ func TestEventSourceRead(t *testing.T) {
 }
 
 func TestEventSourceChangeRetry(t *testing.T) {
-	server := testServer(func(w responseWriter, r *http.Request) {
+	t.Parallel()
+
+	server := testServer(func(w responseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(200)
 
@@ -228,7 +240,9 @@ func TestEventSourceChangeRetry(t *testing.T) {
 }
 
 func TestEventSourceBOM(t *testing.T) {
-	server := testServer(func(w responseWriter, r *http.Request) {
+	t.Parallel()
+
+	server := testServer(func(w responseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(200)
 
