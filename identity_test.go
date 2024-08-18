@@ -38,6 +38,8 @@ func randomEvents() []Event {
 }
 
 func TestEncodeDecodeIdentity(t *testing.T) {
+	t.Parallel()
+
 	r, w := io.Pipe()
 	d, e := NewDecoder(r), NewEncoder(w)
 
