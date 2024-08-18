@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-var emptyHandler Handler = func(id string, e *Encoder, s <-chan bool) {}
+var emptyHandler Handler = func(string, *Encoder, <-chan bool) {}
 
 type testCloseNotifier struct {
 	closed chan bool
@@ -24,6 +24,8 @@ func (n testCloseNotifier) CloseNotify() <-chan bool {
 }
 
 func TestHandlerAcceptable(t *testing.T) {
+	t.Parallel()
+
 	table := []struct {
 		accept string
 		result bool
@@ -47,6 +49,8 @@ func TestHandlerAcceptable(t *testing.T) {
 }
 
 func TestHandlerValidatesAcceptHeader(t *testing.T) {
+	t.Parallel()
+
 	w, r := httptest.NewRecorder(), &http.Request{Header: map[string][]string{
 		"Accept": {"text/html"},
 	}}
@@ -58,6 +62,8 @@ func TestHandlerValidatesAcceptHeader(t *testing.T) {
 }
 
 func TestHandlerSetsContentType(t *testing.T) {
+	t.Parallel()
+
 	w, r := httptest.NewRecorder(), &http.Request{Header: map[string][]string{
 		"Accept": {"text/event-stream"},
 	}}
@@ -73,7 +79,9 @@ func TestHandlerSetsContentType(t *testing.T) {
 }
 
 func TestHandlerEncode(t *testing.T) {
-	handler := func(lastID string, enc *Encoder, stop <-chan bool) {
+	t.Parallel()
+
+	handler := func(_ string, enc *Encoder, _ <-chan bool) {
 		enc.Encode(Event{Data: []byte("hello")})
 	}
 
@@ -92,8 +100,10 @@ func TestHandlerEncode(t *testing.T) {
 }
 
 func TestHandlerCloseNotify(t *testing.T) {
+	t.Parallel()
+
 	done := make(chan bool, 1)
-	handler := func(lastID string, enc *Encoder, stop <-chan bool) {
+	handler := func(_ string, _ *Encoder, stop <-chan bool) {
 		<-stop
 		done <- true
 	}

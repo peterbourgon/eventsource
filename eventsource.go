@@ -41,9 +41,8 @@ type EventSource struct {
 	lastEventID string
 }
 
-// New prepares an EventSource. The connection is automatically managed, using
-// req to connect, and retrying from recoverable errors after waiting the
-// provided retry duration.
+// New calls NewConfig with the provided request and retry interval, and a
+// default HTTP client.
 func New(req *http.Request, retry time.Duration) *EventSource {
 	return NewConfig(Config{
 		Request: req,
@@ -51,16 +50,21 @@ func New(req *http.Request, retry time.Duration) *EventSource {
 	})
 }
 
+// Config enumerates the input parameters for an EventSource client.
 type Config struct {
 	Client  HTTPClient
 	Request *http.Request
 	Retry   time.Duration
 }
 
+// HTTPClient models an [http.Client].
 type HTTPClient interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
+// NewConfig prepares an EventSource client. The connection is automatically
+// managed, using req to connect, and retrying from recoverable errors after
+// waiting the provided retry duration.
 func NewConfig(config Config) *EventSource {
 	if config.Client == nil {
 		config.Client = http.DefaultClient

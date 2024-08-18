@@ -20,6 +20,8 @@ func (f *testFlusher) Flush() {
 }
 
 func TestEncoderFlush(t *testing.T) {
+	t.Parallel()
+
 	buf := &testFlusher{}
 	enc := NewEncoder(buf)
 	enc.WriteField("data", []byte("data"))
@@ -31,6 +33,8 @@ func TestEncoderFlush(t *testing.T) {
 }
 
 func TestWriteField(t *testing.T) {
+	t.Parallel()
+
 	table := []struct {
 		field string
 		value []byte
@@ -66,6 +70,8 @@ func TestWriteField(t *testing.T) {
 }
 
 func TestEncoderEncode(t *testing.T) {
+	t.Parallel()
+
 	table := []struct {
 		Event
 		expected string
