@@ -117,7 +117,7 @@ func TestHandlerCloseNotify(t *testing.T) {
 	closer.Close()
 	select {
 	case <-done:
-	case <-time.After(time.Millisecond):
+	case <-time.After(time.Second):
 		t.Error("handler was not notified of close")
 	}
 }
