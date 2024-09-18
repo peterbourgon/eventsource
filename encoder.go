@@ -21,7 +21,7 @@ func (noopFlusher) Flush() {}
 
 // Encoder writes EventSource events to an output stream.
 type Encoder struct {
-	w FlushWriter
+	FlushWriter
 }
 
 // NewEncoder returns a new encoder that writes to w.
@@ -36,8 +36,8 @@ var newline = []byte{'\n'}
 
 // Flush an empty line to signal event is complete, and flush the writer.
 func (e *Encoder) Flush() error {
-	_, err := e.w.Write(newline)
-	e.w.Flush()
+	_, err := e.FlushWriter.Write(newline)
+	e.FlushWriter.Flush()
 	return err
 }
 
@@ -65,11 +65,11 @@ func (e *Encoder) WriteField(field string, value []byte) error {
 
 func (e *Encoder) writeField(field string, value []byte) error {
 	if len(value) == 0 {
-		_, err := fmt.Fprintf(e.w, "%s\n", field)
+		_, err := fmt.Fprintf(e.FlushWriter, "%s\n", field)
 		return err
 	}
 
-	_, err := fmt.Fprintf(e.w, "%s: %s\n", field, value)
+	_, err := fmt.Fprintf(e.FlushWriter, "%s: %s\n", field, value)
 	return err
 }
 
