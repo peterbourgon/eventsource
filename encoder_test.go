@@ -71,7 +71,7 @@ func TestWriteField(t *testing.T) {
 }
 
 func TestWriteStream(t *testing.T) {
-	//t.Parallel()
+	t.Parallel()
 
 	table := []struct {
 		field string
@@ -81,6 +81,10 @@ func TestWriteStream(t *testing.T) {
 	}{
 		{"data", []byte("data"), "data: data\n", nil},
 		{"data", nil, "data\n", nil},
+		{"data", []byte("\n"), "data\n", nil},
+		{"data", []byte("\r\n"), "data\n", nil},
+		{"data", []byte("\n\n\n"), "data\ndata\ndata\n", nil},
+		{"data", []byte("\r\nhi\r\n\r\n"), "data\ndata: hi\ndata\n", nil},
 		{"\xFF\xFE\xFD", nil, "", ErrInvalidEncoding},
 		{"data", []byte("\xFF\xFE\xFD"), "data: \uFFFD\n", nil},
 		{"data", []byte("hello \xe4\xb8"), "data: hello \uFFFD\n", nil}, // Incomplete '世'
@@ -149,6 +153,44 @@ func TestLargeBuffer(t *testing.T) {
 		if i < len(resultLines) && resultLines[i] != expected {
 			t.Errorf("line %d mismatch: got %q, want %q", i, resultLines[i], expected)
 			break
+		}
+	}
+}
+
+func TestFindLastCompletePos(t *testing.T) {
+	// examples of 1, 2, 3 and 4 byte utf8 characters
+	const (
+		r1 = '0'
+		r2 = 'á'
+		r3 = 'ᄅ'
+		r4 = '𐅻'
+	)
+
+	for i, str1 := range []string{string(r1), string(r2), string(r3), string(r4)} {
+		var pos int
+
+		pos = findLastCompleteUTF8Position([]byte(str1))
+		if pos != len(str1) {
+			t.Errorf("%d. expected %d, got %d", i, len(str1), pos)
+		}
+
+		testStr := str1[:len(str1)-1] // cut off last byte
+		pos = findLastCompleteUTF8Position([]byte(testStr))
+		if pos != 0 {
+			t.Errorf("%d. expected %d, got %d", i, len(str1), pos)
+		}
+
+		for j, str2 := range []string{string(r1), string(r2), string(r3), string(r4)} {
+			pos = findLastCompleteUTF8Position([]byte(str1 + str2))
+			if expected := len(str1) + len(str2); pos != expected {
+				t.Errorf("%d+%d. expected %d, got %d", i, j, expected, pos)
+			}
+
+			testStr = str1 + str2[:len(str2)-1] // cut off last byte
+			pos = findLastCompleteUTF8Position([]byte(testStr))
+			if pos != len(str1) {
+				t.Errorf("%d+%d. expected %d, got %d", i, j, len(str1), pos)
+			}
 		}
 	}
 }
