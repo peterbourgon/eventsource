@@ -130,19 +130,27 @@ func (e *Encoder) WriteStream(field string, stream io.Reader) error {
 		endsWithLinebreak = hasLineBreak && len(data) > 0
 	}
 
-	if scanErr := scanner.Err(); scanErr != nil {
-		return scanErr
-	}
-
 	if !writePrefix {
 		_, err := e.FlushWriter.Write(newline)
-		return err
+		return coalesceErrors(err, scanner.Err())
 	}
 
 	if writtenBytes == 0 || endsWithLinebreak {
-		return e.writeField(field, nil)
+		return coalesceErrors(e.writeField(field, nil), scanner.Err())
 	}
 
+	return scanner.Err()
+}
+
+func coalesceErrors(err error, errs ...error) error {
+	if err != nil {
+		return err
+	}
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

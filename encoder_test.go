@@ -2,6 +2,7 @@ package eventsource
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -109,6 +110,50 @@ func TestWriteStream(t *testing.T) {
 
 		if buf.String() != tt.out {
 			t.Errorf("%d. expected %q, got %q", i, tt.out, buf.String())
+		}
+	}
+}
+
+func TestWriteStreamScannerError(t *testing.T) {
+	t.Parallel()
+
+	table := []struct {
+		field string
+		value []byte
+		out   string
+	}{
+		{"data", []byte("data"), "data: data\n"},
+		{"data", nil, "data\n"},
+		{"data", []byte("\n"), "data\n"},
+		{"data", []byte("\r\n"), "data\n"},
+		{"data", []byte("\n\n\n"), "data\ndata\ndata\n"},
+		{"data", []byte("\r\nhi\r\n\r\n"), "data\ndata: hi\ndata\n"},
+		{"data", []byte("\xFF\xFE\xFD"), "data: \uFFFD\n"},
+		{"data", []byte("hello \xe4\xb8"), "data: hello \uFFFD\n"}, // Incomplete '世'
+		{"data", []byte("\xffhello\xff\xfe world\xfd"), "data: \uFFFDhello\uFFFD world\uFFFD\n"},
+		{"data", []byte("a\nb\nc\n"), "data: a\ndata: b\ndata: c\ndata\n"},
+		{"data", []byte("a\r\nb\r\nc"), "data: a\ndata: b\ndata: c\n"},
+	}
+
+	testError := errors.New("test error")
+
+	for i, tt := range table {
+		buf := new(bytes.Buffer)
+
+		pr, pw := io.Pipe()
+		go func() {
+			defer pw.CloseWithError(testError)
+			pw.Write(tt.value)
+		}()
+
+		err := NewEncoder(buf).WriteStream(tt.field, pr)
+
+		if buf.String() != tt.out {
+			t.Errorf("%d. expected %q, got %q", i, tt.out, buf.String())
+		}
+
+		if !errors.Is(err, testError) {
+			t.Errorf("%d. expected error, got nil", i)
 		}
 	}
 }
